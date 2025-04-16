@@ -26,10 +26,19 @@ function App() {
         body: formData,
       });
 
+      if (!res.ok) {
+        throw new Error("Failed to fetch data from the server.");
+      }
+
       const data = await res.json();
-      setResults(data);
+      if (data.error) {
+        setResults({ error: data.error });
+      } else {
+        setResults(data);
+      }
     } catch (err) {
-      setResults({ error: "Server error." });
+      setResults({ error: "Server error. Please try again later." });
+      console.error(err);  // Log the actual error for debugging purposes
     } finally {
       setLoading(false);
     }
@@ -70,6 +79,7 @@ function App() {
               </div>
             ))}
           </div>
+
           <div className="mt-4">
             <a
               href={results.pdf_url}
