@@ -56,9 +56,10 @@ def run_your_code(image_path):
 
     # Create public URLs
     img_urls = [
-        f"http://localhost:8000/output/{uid}/cell_{i+1}.png" for i in range(len(cropped_images))
-    ]
-    pdf_url = f"http://localhost:8000/output/{uid}/cropped_output.pdf"
+    f"https://grid-backend-846l.onrender.com/output/{uid}/cell_{i+1}.png" for i in range(len(cropped_images))
+]
+    pdf_url = f"https://grid-backend-846l.onrender.com/output/{uid}/cropped_output.pdf"
+
 
     return {
         "message": "Processing complete!",
