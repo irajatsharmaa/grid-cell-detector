@@ -1,3 +1,4 @@
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, File, UploadFile, HTTPException  # Add File and UploadFile imports
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -11,10 +12,11 @@ if not os.path.exists("output"):
 app = FastAPI()
 
 # Add CORS middleware to allow cross-origin requests from React (localhost:3000)
-from fastapi.middleware.cors import CORSMiddleware
+
+# Add this CORS middleware to your FastAPI app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Allow React app to make requests
+    allow_origins=["https://grid-cell-detector.vercel.app"],  # Allow requests only from the Vercel frontend
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
     allow_headers=["*"],  # Allow all headers
