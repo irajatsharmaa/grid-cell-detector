@@ -21,7 +21,7 @@ function App() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/upload-image", {
+      const res = await fetch("https://grid-backend-846l.onrender.com/upload-image", {
         method: "POST",
         body: formData,
       });
