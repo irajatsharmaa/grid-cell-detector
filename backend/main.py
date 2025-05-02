@@ -32,7 +32,7 @@ app = FastAPI()
 # Allow requests from localhost during development
 origins = [
     "http://localhost:3000",
-    os.getenv("FRONTEND_URL", "https://my-grid-app.vercel.app"),
+    "https://grid-cell-detector.vercel.app",  # ← Add this line
 ]
 
 app.add_middleware(
