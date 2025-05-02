@@ -1,88 +1,112 @@
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, File, UploadFile, HTTPException  # Add File and UploadFile imports
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 import os
-from image_processing import run_your_code  # Import your image processing function
+import logging
+import uuid
+import tempfile
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from dotenv import load_dotenv
 
-# Ensure the output directory exists
-if not os.path.exists("output"):
-    os.makedirs("output")
+# Import processing functions
+try:
+    from image_processing import run_your_code as run_camera
+    from microsoft_tatr import run_your_code as run_scanned
+except ImportError as e:
+    logging.error(f"Error importing modules: {e}")
+    raise
+
+# Load environment variables
+load_dotenv()
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Ensure output directory exists
+os.makedirs("output", exist_ok=True)
 
 app = FastAPI()
 
-# Add CORS middleware to allow cross-origin requests from React (localhost:3000)
+# Allow requests from localhost during development
+origins = [
+    "http://localhost:3000",
+    os.getenv("FRONTEND_URL", "https://my-grid-app.vercel.app"),
+]
 
-# Add this CORS middleware to your FastAPI app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://grid-cell-detector.vercel.app"],  # Allow requests only from the Vercel frontend
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Mount the output directory for serving images and PDFs
+# Serve processed images from the output folder
 app.mount("/output", StaticFiles(directory="output"), name="output")
 
-@app.get("/")
-async def root():
-    """
-    A simple root endpoint to check if the server is running.
-    """
-    return {"message": "FastAPI Backend is running!"}
+class ExtractTextRequest(BaseModel):
+    image_url: str
+
+@app.get("/status")
+async def status():
+    logger.info("Status check successful.")
+    return {"status": "Backend is operational."}
 
 @app.post("/upload-image")
-async def upload_image(file: UploadFile = File(...)):
-    """
-    Endpoint to handle image upload, process the image, and return the URLs for cropped images and PDF.
-    """
-    try:
-        # Check if the uploaded file is an image
-        if not file.filename.lower().endswith(('png', 'jpg', 'jpeg', 'bmp', 'gif')):  # Validate file extension
-            raise HTTPException(status_code=400, detail="Only image files are allowed!")
+async def upload_image(
+    file: UploadFile = File(...),
+    mode: str = Form(...)  # expects "scanned" or "camera"
+):
+    logger.info(f"Received file: {file.filename}, Mode: {mode}")
 
-        # Save the uploaded image temporarily
-        img_path = f"temp_{file.filename}"
+    if not file.content_type.startswith("image/"):
+        logger.warning(f"Invalid file type: {file.content_type}")
+        raise HTTPException(status_code=400, detail="Only image files are allowed.")
+
+    try:
+        # Generate secure temp path
+        file_ext = os.path.splitext(file.filename)[1]
+        safe_filename = f"{uuid.uuid4()}_{file_ext}"
+        temp_dir = tempfile.gettempdir()
+        img_path = os.path.join(temp_dir, safe_filename)
+
+        # Save uploaded file
         with open(img_path, "wb") as f:
             f.write(await file.read())
 
-        # Run the image processing function (cropping, grid detection, PDF creation)
-        result = run_your_code(img_path)
+        # Process based on mode
+        if mode == "scanned":
+            result = run_scanned(img_path)
+        elif mode == "camera":
+            result = run_camera(img_path)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid mode selected.")
 
-        # Clean up the temporary image after processing
-        os.remove(img_path)
+        # Cleanup temp file
+        if os.path.exists(img_path):
+            os.remove(img_path)
 
-        # Check if result contains any errors
-        if "error" in result:
+        # Handle errors in result
+        if isinstance(result, dict) and "error" in result:
+            logger.error(f"Processing error: {result['error']}")
             raise HTTPException(status_code=400, detail=result["error"])
 
-        # Return the result with image URLs and PDF download URL
+        # Normalize camera response
+        if mode == "camera":
+            result = {
+                "images": [result.get("detected_image_url", "/output/default.jpg")],
+                "pdf_url": None,
+                "cell_coordinates": result.get("cell_coordinates", {}),
+            }
+
+        logger.info("Image processed successfully.")
         return JSONResponse(content=result)
 
     except HTTPException as e:
-        # Handle HTTP exceptions (like bad file type)
+        logger.warning(f"HTTP Exception: {e.detail}")
         return JSONResponse(status_code=e.status_code, content={"error": e.detail})
     except Exception as e:
-        # Handle unexpected errors
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(status_code=500, content={"error": str(e)})
-
-# Serve the files from the output folder
-@app.get("/output/{uid}/{filename}")
-async def get_file(uid: str, filename: str):
-    """
-    Endpoint to serve the processed image or PDF files from the output folder.
-    """
-    file_path = os.path.join("output", uid, filename)
-    if os.path.exists(file_path):
-        return StaticFiles(directory="output", name=f"{uid}/{filename}")
-    else:
-        raise HTTPException(status_code=404, detail="File not found.")
-
-# Health check for the server
-@app.get("/status")
-async def status():
-    """
-    Endpoint to check the health status of the backend.
-    """
-    return {"status": "Backend is operational."}
