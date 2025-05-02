@@ -59,7 +59,7 @@ function App() {
 
     try {
       const BACKEND_URL = process.env.NODE_ENV === "production"
-        ? "https://your-backend.onrender.com"  // ← Change this to your real backend URL after deployment
+        ? "https://grid-backend-846l.onrender.com"  // ← Change this to your real backend URL after deployment
         : "http://localhost:8000";
 
       const res = await fetch(`${BACKEND_URL}/upload-image`, {
